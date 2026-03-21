@@ -49,10 +49,10 @@ app.get('/api/overview/apikeys', async (req, res) => {
 
 app.post('/api/overview/apikeys', async (req, res) => {
   try {
-    const { module, key_name, full_key, used, remaining, status } = req.body;
+    const { module_name, api_key, full_key, used_amount, remaining_amount, status } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO al_apikeys (module, key_name, full_key, used, remaining, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [module, key_name, full_key, used || 0, remaining || 0, status || 'active']
+      'INSERT INTO al_apikeys (module_name, api_key, full_key, used_amount, remaining_amount, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [module_name, api_key, full_key, used_amount || 0, remaining_amount || 0, status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM al_apikeys WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -63,10 +63,10 @@ app.post('/api/overview/apikeys', async (req, res) => {
 
 app.put('/api/overview/apikeys/:id', async (req, res) => {
   try {
-    const { module, key_name, full_key, used, remaining, status } = req.body;
+    const { module_name, api_key, full_key, used_amount, remaining_amount, status } = req.body;
     await pool.query(
-      'UPDATE al_apikeys SET module = ?, key_name = ?, full_key = ?, used = ?, remaining = ?, status = ? WHERE id = ?',
-      [module, key_name, full_key, used, remaining, status, req.params.id]
+      'UPDATE al_apikeys SET module_name = ?, api_key = ?, full_key = ?, used_amount = ?, remaining_amount = ?, status = ? WHERE id = ?',
+      [module_name, api_key, full_key, used_amount, remaining_amount, status, req.params.id]
     );
     const [rows] = await pool.query('SELECT * FROM al_apikeys WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
@@ -129,8 +129,8 @@ app.put('/api/overview/accounts/:id', async (req, res) => {
 // ============================================================
 app.get('/api/overview/token-usage', async (req, res) => {
   try {
-    const [keys] = await pool.query('SELECT module, used FROM al_apikeys');
-    const total = keys.reduce((sum: number, k: any) => sum + (k.used || 0), 0);
+    const [keys] = await pool.query('SELECT module_name, used_amount FROM al_apikeys');
+    const total = keys.reduce((sum: number, k: any) => sum + (k.used_amount || 0), 0);
     res.json({
       total,
       breakdown: [
@@ -161,10 +161,10 @@ app.get('/api/philosophy/philosophers', async (req, res) => {
 
 app.post('/api/philosophy/philosophers', async (req, res) => {
   try {
-    const { name, era, description, prompt, keywords, status } = req.body;
+    const { philosopher_name, philosopher_era, description_text, system_prompt, keywords, status } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO ik_philosophers (name, era, description, prompt, keywords, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, era, description, prompt, JSON.stringify(keywords), status || 'active']
+      'INSERT INTO ik_philosophers (philosopher_name, philosopher_era, description_text, system_prompt, keywords, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [philosopher_name, philosopher_era, description_text, system_prompt, JSON.stringify(keywords), status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM ik_philosophers WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -175,10 +175,10 @@ app.post('/api/philosophy/philosophers', async (req, res) => {
 
 app.put('/api/philosophy/philosophers/:id', async (req, res) => {
   try {
-    const { name, era, description, prompt, keywords, status } = req.body;
+    const { philosopher_name, philosopher_era, description_text, system_prompt, keywords, status } = req.body;
     await pool.query(
-      'UPDATE ik_philosophers SET name = ?, era = ?, description = ?, prompt = ?, keywords = ?, status = ? WHERE id = ?',
-      [name, era, description, prompt, JSON.stringify(keywords), status, req.params.id]
+      'UPDATE ik_philosophers SET philosopher_name = ?, philosopher_era = ?, description_text = ?, system_prompt = ?, keywords = ?, status = ? WHERE id = ?',
+      [philosopher_name, philosopher_era, description_text, system_prompt, JSON.stringify(keywords), status, req.params.id]
     );
     const [rows] = await pool.query('SELECT * FROM ik_philosophers WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
@@ -210,10 +210,10 @@ app.get('/api/philosophy/questions', async (req, res) => {
 
 app.post('/api/philosophy/questions', async (req, res) => {
   try {
-    const { content, philosopher, category, usage_count, status } = req.body;
+    const { question_content, philosopher_name, category_name, question_times, status } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO ik_questions (content, philosopher, category, usage_count, status) VALUES (?, ?, ?, ?, ?)',
-      [content, philosopher, category, usage_count || 0, status || 'active']
+      'INSERT INTO ik_questions (question_content, philosopher_name, category_name, question_times, status) VALUES (?, ?, ?, ?, ?)',
+      [question_content, philosopher_name, category_name, question_times || 0, status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM ik_questions WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -224,10 +224,10 @@ app.post('/api/philosophy/questions', async (req, res) => {
 
 app.put('/api/philosophy/questions/:id', async (req, res) => {
   try {
-    const { content, philosopher, category, usage_count, status } = req.body;
+    const { question_content, philosopher_name, category_name, question_times, status } = req.body;
     await pool.query(
-      'UPDATE ik_questions SET content = ?, philosopher = ?, category = ?, usage_count = ?, status = ? WHERE id = ?',
-      [content, philosopher, category, usage_count, status, req.params.id]
+      'UPDATE ik_questions SET question_content = ?, philosopher_name = ?, category_name = ?, question_times = ?, status = ? WHERE id = ?',
+      [question_content, philosopher_name, category_name, question_times, status, req.params.id]
     );
     const [rows] = await pool.query('SELECT * FROM ik_questions WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
@@ -250,7 +250,7 @@ app.delete('/api/philosophy/questions/:id', async (req, res) => {
 // ============================================================
 app.get('/api/philosophy/history', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_history ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT * FROM ik_history ORDER BY create_time DESC');
     res.json({ history: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -259,7 +259,7 @@ app.get('/api/philosophy/history', async (req, res) => {
 
 app.get('/api/philosophy/history/:userId', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_history WHERE user_id = ? ORDER BY created_at DESC', [req.params.userId]);
+    const [rows] = await pool.query('SELECT * FROM ik_history WHERE user_id = ? ORDER BY create_time DESC', [req.params.userId]);
     res.json({ history: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -355,10 +355,10 @@ app.get('/api/fortune/explore', async (req, res) => {
 
 app.post('/api/fortune/explore', async (req, res) => {
   try {
-    const { title, category, content, status } = req.body;
+    const { article_title, category_name, article_content, status } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO yh_fortune_articles (title, category, content, status) VALUES (?, ?, ?, ?)',
-      [title, category, content, status || 'active']
+      'INSERT INTO yh_fortune_articles (article_title, category_name, article_content, status) VALUES (?, ?, ?, ?)',
+      [article_title, category_name, article_content, status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM yh_fortune_articles WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -378,10 +378,10 @@ app.get('/api/fortune/banners', async (req, res) => {
 
 app.post('/api/fortune/banners', async (req, res) => {
   try {
-    const { title, image, link, sort_order, status } = req.body;
+    const { banner_title, banner_image, banner_link, sort_order, status } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO yh_fortune_banners (title, image, link, sort_order, status) VALUES (?, ?, ?, ?, ?)',
-      [title, image, link, sort_order || 0, status || 'active']
+      'INSERT INTO yh_fortune_banners (banner_title, banner_image, banner_link, sort_order, status) VALUES (?, ?, ?, ?, ?)',
+      [banner_title, banner_image, banner_link, sort_order || 0, status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM yh_fortune_banners WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -391,7 +391,7 @@ app.post('/api/fortune/banners', async (req, res) => {
 });
 
 // ============================================================
-// 堪舆模块 API (fy_*)
+// 堪舆模块 API (fy_history)
 // ============================================================
 app.get('/api/fengshui/users', async (req, res) => {
   try {

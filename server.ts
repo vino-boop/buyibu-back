@@ -155,7 +155,7 @@ app.get('/api/overview/token-usage', async (req, res) => {
 // ============================================================
 app.get('/api/philosophy/philosophers', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_philosophers ORDER BY id DESC');
+    const [rows] = await pool.query('SELECT id, philosopher_name as name, philosopher_era as era, description_text as description, system_prompt as prompt, keywords, status FROM ik_philosophers ORDER BY id DESC');
     res.json({ philosophers: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -204,7 +204,20 @@ app.delete('/api/philosophy/philosophers/:id', async (req, res) => {
 // ============================================================
 app.get('/api/philosophy/questions', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_questions ORDER BY id DESC');
+    const { mode } = req.query;
+    let query = 'SELECT id, question_content as content, philosopher_name as philosopher, mode, suggestions, usage_count, status FROM ik_questions';
+    let params: any[] = [];
+    
+    if (mode) {
+      query += ' WHERE mode = ? AND status = ?';
+      params = [mode, 'active'];
+    } else {
+      query += ' WHERE status = ?';
+      params = ['active'];
+    }
+    
+    query += ' ORDER BY usage_count DESC';
+    const [rows] = await pool.query(query, params);
     res.json({ questions: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -213,10 +226,10 @@ app.get('/api/philosophy/questions', async (req, res) => {
 
 app.post('/api/philosophy/questions', async (req, res) => {
   try {
-    const { question_content, philosopher_name, category_name, question_times, status } = req.body;
+    const { question_content, philosopher_name, mode, suggestions, usage_count, status } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO ik_questions (question_content, philosopher_name, category_name, question_times, status) VALUES (?, ?, ?, ?, ?)',
-      [question_content, philosopher_name, category_name, question_times || 0, status || 'active']
+      'INSERT INTO ik_questions (question_content, philosopher_name, mode, suggestions, usage_count, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [question_content, philosopher_name, mode, JSON.stringify(suggestions), usage_count || 0, status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM ik_questions WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -227,10 +240,10 @@ app.post('/api/philosophy/questions', async (req, res) => {
 
 app.put('/api/philosophy/questions/:id', async (req, res) => {
   try {
-    const { question_content, philosopher_name, category_name, question_times, status } = req.body;
+    const { question_content, philosopher_name, mode, suggestions, usage_count, status } = req.body;
     await pool.query(
-      'UPDATE ik_questions SET question_content = ?, philosopher_name = ?, category_name = ?, question_times = ?, status = ? WHERE id = ?',
-      [question_content, philosopher_name, category_name, question_times, status, req.params.id]
+      'UPDATE ik_questions SET question_content = ?, philosopher_name = ?, mode = ?, suggestions = ?, usage_count = ?, status = ? WHERE id = ?',
+      [question_content, philosopher_name, mode, JSON.stringify(suggestions), usage_count, status, req.params.id]
     );
     const [rows] = await pool.query('SELECT * FROM ik_questions WHERE id = ?', [req.params.id]);
     res.json(rows[0]);

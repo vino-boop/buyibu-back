@@ -591,12 +591,11 @@ app.post('/api/ai/deepseek', async (req, res) => {
   try {
     const { messages, philosopher } = req.body;
     
-    // 获取 API Key
+    // 获取 API Key - 从数据库读取
     const [keys] = await pool.query("SELECT * FROM al_apikeys WHERE module_name = '哲思' AND status = 'active' LIMIT 1");
     if (keys.length === 0) {
-      return res.status(500).json({ error: 'No API key available' });
+      return res.status(500).json({ error: 'API Key not configured' });
     }
-    
     const apiKey = keys[0].full_key;
     
     // 调用 DeepSeek API
@@ -617,7 +616,9 @@ app.post('/api/ai/deepseek', async (req, res) => {
     
     // 更新 API Key 使用量
     const tokensUsed = data.usage?.total_tokens || 0;
-    await pool.query('UPDATE al_apikeys SET used_amount = used_amount + ? WHERE id = ?', [tokensUsed, keys[0].id]);
+    if (keys && keys.length > 0) {
+      await pool.query('UPDATE al_apikeys SET used_amount = used_amount + ? WHERE id = ?', [tokensUsed, keys[0].id]);
+    }
     
     res.json(data);
   } catch (error) {

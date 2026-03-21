@@ -628,8 +628,9 @@ app.post('/api/ai/deepseek', async (req, res) => {
 // ============================================================
 // Start Server
 // ============================================================
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API Server running on port ${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
+  console.log(`   External: http://0.0.0.0:${PORT}/api`);
   console.log(`   Database: MySQL (buyibu)`);
 });

@@ -303,11 +303,11 @@ app.put('/api/philosophy/judge-prompt', async (req, res) => {
 });
 
 // ============================================================
-// 哲思模块 API - 用户信息 (ik_accounts)
+// 哲思模块 API - 用户信息 (使用 all_accounts)
 // ============================================================
 app.get('/api/philosophy/users', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_accounts ORDER BY id DESC');
+    const [rows] = await pool.query('SELECT * FROM all_accounts ORDER BY id DESC');
     const users = (rows as any[]).map(a => ({
       userId: a.id,
       name: a.name,
@@ -405,6 +405,131 @@ app.get('/api/fengshui/users', async (req, res) => {
 app.get('/api/fengshui/history', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM fy_history ORDER BY created_at DESC');
+    res.json({ records: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 认证模块 API (需要创建 auth 表或使用 all_accounts)
+// ============================================================
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    // 简单验证，使用 all_accounts 的 wechat 字段作为密码
+    const [rows] = await pool.query('SELECT * FROM all_accounts WHERE name = ?', [username]);
+    if (rows.length === 0) {
+      return res.status(401).json({ error: '用户不存在' });
+    }
+    const user = rows[0];
+    // 简单密码验证（实际应该加密存储）
+    if (user.wechat !== password) {
+      return res.status(401).json({ error: '密码错误' });
+    }
+    res.json({ 
+      success: true, 
+      user: { id: user.id, name: user.name, phone: user.phone },
+      token: `user_${user.id}_${Date.now()}`
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, password, phone, wechat } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO all_accounts (name, phone, wechat, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [username, phone || '', wechat || password, 'none', 'none', 'none', 'normal', 'user']
+    );
+    res.json({ success: true, userId: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 哲思模块 - 用户信息 (使用 all_accounts)
+// ============================================================
+app.get('/api/philosophy/user/:userId', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM all_accounts WHERE id = ?', [req.params.userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+    const user = rows[0];
+    res.json({ 
+      id: user.id, 
+      name: user.name, 
+      phone: user.phone,
+      philosophy: user.philosophy,
+      isMember: user.philosophy === 'member'
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 哲思模块 - 哲学家 Prompt
+// ============================================================
+app.get('/api/philosophy/prompts/philosopher', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT philosopher_name, philosopher_era, system_prompt FROM ik_philosophers WHERE status = ?', ['active']);
+    res.json({ prompts: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 哲思模块 - 保存对话历史
+// ============================================================
+app.post('/api/philosophy/history', async (req, res) => {
+  try {
+    const { user_id, user_name, session_id, question_content, answer_content, philosopher_name, token_count, mode, is_member } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO ik_history (user_id, user_name, session_id, question_content, answer_content, philosopher_name, token_count, mode, is_member) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, user_name, session_id, question_content, answer_content, philosopher_name, token_count || 0, mode || 'chat', is_member || '否']
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 运何模块 - 用户八字
+// ============================================================
+app.get('/api/fortune/bazi/:userId', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM yh_fortune_bazi WHERE user_id = ? ORDER BY created_at DESC', [req.params.userId]);
+    res.json({ records: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 运何模块 - 用户六爻
+// ============================================================
+app.get('/api/fortune/liuyao/:userId', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM yh_fortune_liuyao WHERE user_id = ? ORDER BY created_at DESC', [req.params.userId]);
+    res.json({ records: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 堪舆模块 - 用户历史
+// ============================================================
+app.get('/api/fengshui/history/:userId', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM fy_history WHERE user_id = ? ORDER BY created_at DESC', [req.params.userId]);
     res.json({ records: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });

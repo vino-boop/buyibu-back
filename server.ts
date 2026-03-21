@@ -21,7 +21,10 @@ const pool = mysql.createPool({
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['https://philosophy.vinolab.tech', 'https://thinking.vinolab.tech', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
 
 // 测试数据库连接

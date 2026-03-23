@@ -678,6 +678,92 @@ app.get('/api/fengshui/history/:userId', async (req, res) => {
 });
 
 // ============================================================
+// 哲思模块 - 对话历史详细记录 (ik_user_conversations)
+// ============================================================
+// 保存单轮对话
+app.post('/api/conversations', async (req, res) => {
+  try {
+    const { user_id, session_id, mode, round, judge_question, user_answer, judge_response, philosopher_response } = req.body;
+    
+    const [result] = await pool.query(
+      'INSERT INTO ik_user_conversations (user_id, session_id, mode, round, judge_question, user_answer, judge_response, philosopher_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, session_id, mode, round || 1, judge_question, user_answer, judge_response, philosopher_response]
+    );
+    
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 获取对话历史列表
+app.get('/api/conversations', async (req, res) => {
+  try {
+    const { user_id, session_id } = req.query;
+    let query = 'SELECT * FROM ik_user_conversations';
+    let params: any[] = [];
+    
+    if (user_id && session_id) {
+      query += ' WHERE user_id = ? AND session_id = ? ORDER BY round ASC';
+      params = [user_id, session_id];
+    } else if (user_id) {
+      query += ' WHERE user_id = ? ORDER BY created_at DESC';
+      params = [user_id];
+    } else {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+    
+    const [rows] = await pool.query(query, params);
+    res.json({ conversations: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
+// 哲思模块 - 分析报告 (ik_analysis_reports)
+// ============================================================
+// 保存分析报告
+app.post('/api/reports', async (req, res) => {
+  try {
+    const { user_id, session_id, mode, title, summary, philosophical_trend, key_insights, suggested_paths, motto, dimensions, raw_data } = req.body;
+    
+    const [result] = await pool.query(
+      'INSERT INTO ik_analysis_reports (user_id, session_id, mode, title, summary, philosophical_trend, key_insights, suggested_paths, motto, dimensions, raw_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, session_id, mode, title, summary, philosophical_trend, JSON.stringify(key_insights), JSON.stringify(suggested_paths), motto, JSON.stringify(dimensions), raw_data]
+    );
+    
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 获取分析报告
+app.get('/api/reports', async (req, res) => {
+  try {
+    const { user_id, session_id } = req.query;
+    let query = 'SELECT * FROM ik_analysis_reports';
+    let params: any[] = [];
+    
+    if (user_id && session_id) {
+      query += ' WHERE user_id = ? AND session_id = ? ORDER BY created_at DESC LIMIT 1';
+      params = [user_id, session_id];
+    } else if (user_id) {
+      query += ' WHERE user_id = ? ORDER BY created_at DESC';
+      params = [user_id];
+    } else {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+    
+    const [rows] = await pool.query(query, params);
+    res.json({ reports: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
 // AI 对话接口
 // ============================================================
 app.post('/api/ai/deepseek', async (req, res) => {

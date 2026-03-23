@@ -688,13 +688,13 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
     
     // 获取历史记录
     const [historyRows] = await pool.query(
-      'SELECT session_id, mode, question_content, answer_content, philosopher_name, created_at FROM ik_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+      'SELECT session_id, mode, question_content, answer_content, philosopher_name, create_time FROM ik_history WHERE user_id = ? ORDER BY create_time DESC LIMIT ?',
       [userId, limit]
     );
     
     // 获取分析报告
     const [reportRows] = await pool.query(
-      'SELECT session_id, mode, title, summary, philosophical_trend, created_at FROM ik_analysis_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+      'SELECT session_id, mode, title, summary, philosophical_trend, create_time FROM ik_analysis_reports WHERE user_id = ? ORDER BY create_time DESC LIMIT ?',
       [userId, limit]
     );
     
@@ -707,7 +707,7 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
       mode: h.mode,
       questionCount: 1, // 简化计算
       lastMessage: h.question_content?.slice(0, 50) || '',
-      createdAt: h.created_at,
+      createdAt: h.create_time,
       hasReport: sessionsWithReports.has(h.session_id)
     }));
     
@@ -721,7 +721,10 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
     
     res.json({ 
       history: uniqueHistory,
-      reports: reportRows
+      reports: (reportRows as any[]).map(r => ({
+        ...r,
+        createdAt: r.create_time
+      }))
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });

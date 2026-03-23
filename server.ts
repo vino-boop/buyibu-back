@@ -678,6 +678,57 @@ app.get('/api/fengshui/history/:userId', async (req, res) => {
 });
 
 // ============================================================
+// 哲思模块 - 用户历史记录列表 (包含报告)
+// ============================================================
+// 获取用户的所有历史记录和报告
+app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const limit = 50; // 最多50条
+    
+    // 获取历史记录
+    const [historyRows] = await pool.query(
+      'SELECT session_id, mode, question_content, answer_content, philosopher_name, created_at FROM ik_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+      [userId, limit]
+    );
+    
+    // 获取分析报告
+    const [reportRows] = await pool.query(
+      'SELECT session_id, mode, title, summary, philosophical_trend, created_at FROM ik_analysis_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+      [userId, limit]
+    );
+    
+    // 构建会话ID列表
+    const sessionsWithReports = new Set((reportRows as any[]).map(r => r.session_id));
+    
+    // 合并历史记录，标记是否有报告
+    const history = (historyRows as any[]).map(h => ({
+      sessionId: h.session_id,
+      mode: h.mode,
+      questionCount: 1, // 简化计算
+      lastMessage: h.question_content?.slice(0, 50) || '',
+      createdAt: h.created_at,
+      hasReport: sessionsWithReports.has(h.session_id)
+    }));
+    
+    // 去重并按时间排序
+    const uniqueHistory = history.reduce((acc: any[], h) => {
+      if (!acc.find(a => a.sessionId === h.sessionId)) {
+        acc.push(h);
+      }
+      return acc;
+    }, []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
+    
+    res.json({ 
+      history: uniqueHistory,
+      reports: reportRows
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================
 // 哲思模块 - 对话历史详细记录 (ik_user_conversations)
 // ============================================================
 // 保存单轮对话

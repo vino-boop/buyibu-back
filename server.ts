@@ -155,7 +155,20 @@ app.get('/api/overview/token-usage', async (req, res) => {
 // ============================================================
 app.get('/api/philosophy/philosophers', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT id, philosopher_name as name, philosopher_era as era, description_text as description, system_prompt as prompt, keywords, status FROM ik_philosophers ORDER BY id DESC');
+    const { mode } = req.query;
+    let query = 'SELECT id, philosopher_name as name, display_name_zh, display_name_en, philosopher_era as era, description_text as description, system_prompt as prompt, keywords, modes, status FROM ik_philosophers';
+    let params: any[] = [];
+    
+    if (mode) {
+      // 根据模式筛选哲学家
+      query += ' WHERE modes LIKE ? AND status = ?';
+      params = [`%${mode}%`, 'active'];
+    } else {
+      query += ' WHERE status = ?';
+      params = ['active'];
+    }
+    
+    const [rows] = await pool.query(query, params);
     res.json({ philosophers: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -283,24 +296,49 @@ app.get('/api/philosophy/history/:userId', async (req, res) => {
 });
 
 // ============================================================
-// 哲思模块 API - 审判机 Prompt (ik_judge_config)
+// 哲思模块 API - 审判机配置 (ik_judge_config)
 // ============================================================
 app.get('/api/philosophy/judge-prompt', async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT * FROM ik_judge_config WHERE config_key = 'judge_prompt'");
-    if (rows.length > 0) {
-      res.json(JSON.parse(rows[0].config_value));
-    } else {
-      res.json({
-        prompt: '你是"哲思审判机"，负责评估用户与哲学家对话的质量和深度。',
-        rules: ['逻辑性（25分）', '深度（25分）', '原创性（25分）', '完整性（25分）']
-      });
-    }
-  } catch (error) {
+    const { mode } = req.query;
+    const lang = req.query.lang || 'zh';
+    
+    // 获取系统提示词
+    const [systemRows] = await pool.query(
+      "SELECT config_value FROM ik_judge_config WHERE config_key = ?",
+      [`judge_system_prompt_${lang}`]
+    );
+    
+    // 获取模式上下文
+    const [contextRows] = await pool.query(
+      "SELECT config_value FROM ik_judge_config WHERE config_key = ?",
+      [`judge_context_${mode}`]
+    );
+    
+    const systemPrompt = systemRows.length > 0 ? JSON.parse(systemRows[0].config_value).content : '';
+    const context = contextRows.length > 0 ? JSON.parse(contextRows[0].config_value)[lang] : '';
+    
     res.json({
-      prompt: '你是"哲思审判机"，负责评估用户与哲学家对话的质量和深度。',
-      rules: ['逻辑性（25分）', '深度（25分）', '原创性（25分）', '完整性（25分）']
+      systemPrompt,
+      context,
+      mode
     });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 获取所有审判机配置
+app.get('/api/philosophy/judge-config', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM ik_judge_config');
+    const config: Record<string, any> = {};
+    for (const row of rows as any[]) {
+      config[row.config_key] = JSON.parse(row.config_value);
+    }
+    res.json(config);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
   }
 });
 
@@ -501,8 +539,34 @@ app.get('/api/philosophy/user/:userId', async (req, res) => {
 // ============================================================
 app.get('/api/philosophy/prompts/philosopher', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT philosopher_name, philosopher_era, system_prompt FROM ik_philosophers WHERE status = ?', ['active']);
+    const { mode } = req.query;
+    let query = 'SELECT philosopher_name as name, display_name_zh, display_name_en, philosopher_era as era, description_text as description, system_prompt, keywords, modes FROM ik_philosophers WHERE status = ?';
+    let params: any[] = ['active'];
+    
+    if (mode) {
+      query += ' AND modes LIKE ?';
+      params.push(`%${mode}%`);
+    }
+    
+    const [rows] = await pool.query(query, params);
     res.json({ prompts: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 获取单个哲学家详情
+app.get('/api/philosophy/prompts/philosopher/:id', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT philosopher_name as name, display_name_zh, display_name_en, philosopher_era as era, description_text as description, system_prompt, keywords, modes FROM ik_philosophers WHERE id = ?',
+      [req.params.id]
+    );
+    if (rows.length > 0) {
+      res.json(rows[0]);
+    } else {
+      res.status(404).json({ error: 'Philosopher not found' });
+    }
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

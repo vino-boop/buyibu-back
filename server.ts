@@ -16,7 +16,7 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'buyibu',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 5,
   queueLimit: 0
 });
 
@@ -908,9 +908,30 @@ app.post('/api/ai/deepseek', async (req, res) => {
 // ============================================================
 // Start Server
 // ============================================================
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 API Server running on port ${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/api/health`);
-  console.log(`   External: http://0.0.0.0:${PORT}/api`);
-  console.log(`   Database: MySQL (buyibu)`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log('-------------------------------------------');
+  console.log(`🚀 卜一卜后端服务已成功启动！`);
+  console.log(`📍 监听端口: ${PORT}`);
+  console.log(`🔗 健康检查: http://localhost:${PORT}/api/health`);
+  console.log('-------------------------------------------');
+});
+
+// 处理端口占用错误，这是防止 CPU 飙升的核心
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ 启动失败：端口 ${PORT} 已被占用！`);
+    console.error(`💡 解决方案：请先执行 'pkill -9 node' 彻底清理残留进程`);
+    
+    // 延迟 5 秒退出，给系统喘息机会，防止 PM2 疯狂拉起进程
+    setTimeout(() => {
+      process.exit(1);
+    }, 5000);
+  } else {
+    console.error('服务器发生未知错误:', err);
+  }
+});
+
+// 捕获全局未处理的 Promise 错误，防止进程静默崩溃
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
 });

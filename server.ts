@@ -218,7 +218,7 @@ app.delete('/api/philosophy/philosophers/:id', async (req, res) => {
 app.get('/api/philosophy/questions', async (req, res) => {
   try {
     const { mode } = req.query;
-    let query = 'SELECT id, question_content as content, philosopher_name as philosopher, mode, suggestions, usage_count, status FROM ik_questions';
+    let query = `SELECT id, question_content as content, philosopher_name as philosopher, mode, suggestions, usage_count, status, question_group, question_prompt, question_order FROM ik_questions`;
     let params: any[] = [];
     
     if (mode) {
@@ -229,7 +229,7 @@ app.get('/api/philosophy/questions', async (req, res) => {
       params = ['active'];
     }
     
-    query += ' ORDER BY usage_count DESC';
+    query += ' ORDER BY question_group, question_order, usage_count DESC';
     const [rows] = await pool.query(query, params);
     res.json({ questions: rows });
   } catch (error) {
@@ -239,10 +239,10 @@ app.get('/api/philosophy/questions', async (req, res) => {
 
 app.post('/api/philosophy/questions', async (req, res) => {
   try {
-    const { question_content, philosopher_name, mode, suggestions, usage_count, status } = req.body;
+    const { question_content, philosopher_name, mode, suggestions, usage_count, status, question_group, question_prompt, question_order } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO ik_questions (question_content, philosopher_name, mode, suggestions, usage_count, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [question_content, philosopher_name, mode, JSON.stringify(suggestions), usage_count || 0, status || 'active']
+      'INSERT INTO ik_questions (question_content, philosopher_name, mode, suggestions, usage_count, status, question_group, question_prompt, question_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [question_content, philosopher_name, mode, JSON.stringify(suggestions), usage_count || 0, status || 'active', question_group || null, question_prompt || null, question_order || 0]
     );
     const [rows] = await pool.query('SELECT * FROM ik_questions WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
@@ -253,10 +253,10 @@ app.post('/api/philosophy/questions', async (req, res) => {
 
 app.put('/api/philosophy/questions/:id', async (req, res) => {
   try {
-    const { question_content, philosopher_name, mode, suggestions, usage_count, status } = req.body;
+    const { question_content, philosopher_name, mode, suggestions, usage_count, status, question_group, question_prompt, question_order } = req.body;
     await pool.query(
-      'UPDATE ik_questions SET question_content = ?, philosopher_name = ?, mode = ?, suggestions = ?, usage_count = ?, status = ? WHERE id = ?',
-      [question_content, philosopher_name, mode, JSON.stringify(suggestions), usage_count, status, req.params.id]
+      'UPDATE ik_questions SET question_content = ?, philosopher_name = ?, mode = ?, suggestions = ?, usage_count = ?, status = ?, question_group = ?, question_prompt = ?, question_order = ? WHERE id = ?',
+      [question_content, philosopher_name, mode, JSON.stringify(suggestions), usage_count, status, question_group || null, question_prompt || null, question_order || 0, req.params.id]
     );
     const [rows] = await pool.query('SELECT * FROM ik_questions WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
@@ -288,7 +288,14 @@ app.get('/api/philosophy/history', async (req, res) => {
 
 app.get('/api/philosophy/history/:userId', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_history WHERE user_id = ? ORDER BY create_time DESC', [req.params.userId]);
+    // userId 可能是数字或字符串，都需要查询
+    const userIdStr = String(req.params.userId);
+    const userIdNum = parseInt(req.params.userId);
+    
+    const [rows] = await pool.query(
+      'SELECT * FROM ik_history WHERE user_id = ? OR user_id = ? ORDER BY create_time DESC', 
+      [userIdStr, userIdNum]
+    );
     res.json({ history: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -513,6 +520,13 @@ app.post('/api/auth/login', async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ error: '密码错误' });
     }
+    // 登录成功后将用户注册到 ik_accounts
+    const isMember = user.philosophy === 'member' ? 1 : 0;
+    await pool.query(
+      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), phone = VALUES(phone), is_member = VALUES(is_member)',
+      [String(user.id), user.name, user.phone, user.status || 'active', isMember]
+    );
+    
     res.json({ 
       success: true, 
       user: { id: user.id, name: user.name, phone: user.phone, philosophy: user.philosophy },
@@ -535,6 +549,13 @@ app.post('/api/auth/register', async (req, res) => {
       'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [username, username, phone || '', password, 'none', 'none', 'none', 'normal', 'user']
     );
+    
+    // 注册成功后添加到 ik_accounts（新用户默认不是会员）
+    await pool.query(
+      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member) VALUES (?, ?, ?, ?, ?)',
+      [String(result.insertId), username, phone || '', 'active', 0]
+    );
+    
     res.json({ success: true, userId: result.insertId });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -684,18 +705,19 @@ app.get('/api/fengshui/history/:userId', async (req, res) => {
 app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
+    const userIdNum = parseInt(req.params.userId);
     const limit = 50; // 最多50条
     
-    // 获取历史记录
+    // 获取历史记录（兼容字符串和数字ID）
     const [historyRows] = await pool.query(
-      'SELECT session_id, mode, question_content, answer_content, philosopher_name, create_time FROM ik_history WHERE user_id = ? ORDER BY create_time DESC LIMIT ?',
-      [userId, limit]
+      'SELECT session_id, mode, question_content, answer_content, philosopher_name, create_time FROM ik_history WHERE user_id = ? OR user_id = ? ORDER BY create_time DESC LIMIT ?',
+      [userId, userIdNum, limit]
     );
     
     // 获取分析报告
     const [reportRows] = await pool.query(
-      'SELECT session_id, mode, title, summary, philosophical_trend, create_time FROM ik_analysis_reports WHERE user_id = ? ORDER BY create_time DESC LIMIT ?',
-      [userId, limit]
+      'SELECT session_id, mode, title, summary, philosophical_trend, create_time FROM ik_analysis_reports WHERE user_id = ? OR user_id = ? ORDER BY create_time DESC LIMIT ?',
+      [userId, userIdNum, limit]
     );
     
     // 构建会话ID列表

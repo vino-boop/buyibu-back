@@ -522,14 +522,19 @@ app.post('/api/auth/login', async (req, res) => {
     }
     // 登录成功后将用户注册到 ik_accounts
     const isMember = user.philosophy === 'member' ? 1 : 0;
+    
+    // 获取用户 tokens
+    const [ikRows] = await pool.query('SELECT tokens FROM ik_accounts WHERE user_id = ?', [String(user.id)]);
+    const userTokens = ikRows.length > 0 ? (ikRows[0].tokens || 0) : 100;
+    
     await pool.query(
-      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), phone = VALUES(phone), is_member = VALUES(is_member)',
-      [String(user.id), user.name, user.phone, user.status || 'active', isMember]
+      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), phone = VALUES(phone), is_member = VALUES(is_member), tokens = VALUES(tokens)',
+      [String(user.id), user.name, user.phone, user.status || 'active', isMember, userTokens]
     );
     
     res.json({ 
       success: true, 
-      user: { id: user.id, name: user.name, phone: user.phone, philosophy: user.philosophy },
+      user: { id: user.id, name: user.name, phone: user.phone, philosophy: user.philosophy, tokens: userTokens },
       token: `user_${user.id}_${Date.now()}`
     });
   } catch (error) {
@@ -540,23 +545,42 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, password, phone } = req.body;
-    // 检查用户名是否已存在
-    const [exist] = await pool.query('SELECT id FROM all_accounts WHERE username = ? OR phone = ?', [username, phone]);
-    if (exist.length > 0) {
-      return res.status(400).json({ error: '用户名或手机号已存在' });
+    
+    // 获取当前最大编号，生成默认用户名
+    const [maxUser] = await pool.query('SELECT MAX(CAST(SUBSTRING(name, 5) AS UNSIGNED)) as maxNum FROM all_accounts WHERE name LIKE "思考者%"');
+    const nextNum = (maxUser[0]?.maxNum || 0) + 1;
+    const defaultName = `思考者${String(nextNum).padStart(3, '0')}`;
+    
+    // 检查手机号是否已存在
+    if (phone) {
+      const [existPhone] = await pool.query('SELECT id FROM all_accounts WHERE phone = ?', [phone]);
+      if (existPhone.length > 0) {
+        return res.status(400).json({ error: '手机号已注册' });
+      }
     }
+    
+    // 插入 all_accounts
     const [result] = await pool.query(
       'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [username, username, phone || '', password, 'none', 'none', 'none', 'normal', 'user']
+      [defaultName, phone || defaultName, phone || '', password, 'none', 'none', 'none', 'normal', 'user']
     );
     
-    // 注册成功后添加到 ik_accounts（新用户默认不是会员）
+    // 注册成功后添加到 ik_accounts（新用户默认100先令）
     await pool.query(
-      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member) VALUES (?, ?, ?, ?, ?)',
-      [String(result.insertId), username, phone || '', 'active', 0]
+      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
+      [String(result.insertId), phone || defaultName, phone || '', 'active', 0, 100]
     );
     
-    res.json({ success: true, userId: result.insertId });
+    res.json({ 
+      success: true, 
+      userId: result.insertId,
+      user: {
+        id: result.insertId,
+        username: defaultName,
+        phone: phone,
+        tokens: 100
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

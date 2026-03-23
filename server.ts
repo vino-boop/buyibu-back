@@ -315,8 +315,30 @@ app.get('/api/philosophy/judge-prompt', async (req, res) => {
       [`judge_context_${mode}`]
     );
     
-    const systemPrompt = systemRows.length > 0 ? JSON.parse(systemRows[0].config_value).content : '';
-    const context = contextRows.length > 0 ? JSON.parse(contextRows[0].config_value)[lang] : '';
+    let systemPrompt = '';
+    let context = '';
+    
+    try {
+      if (systemRows.length > 0) {
+        const parsed = typeof systemRows[0].config_value === 'string' 
+          ? JSON.parse(systemRows[0].config_value) 
+          : systemRows[0].config_value;
+        systemPrompt = parsed?.content || '';
+      }
+    } catch (e) {
+      console.error('Parse system prompt error:', e);
+    }
+    
+    try {
+      if (contextRows.length > 0) {
+        const parsed = typeof contextRows[0].config_value === 'string' 
+          ? JSON.parse(contextRows[0].config_value) 
+          : contextRows[0].config_value;
+        context = parsed?.[lang] || '';
+      }
+    } catch (e) {
+      console.error('Parse context error:', e);
+    }
     
     res.json({
       systemPrompt,
@@ -334,7 +356,14 @@ app.get('/api/philosophy/judge-config', async (req, res) => {
     const [rows] = await pool.query('SELECT * FROM ik_judge_config');
     const config: Record<string, any> = {};
     for (const row of rows as any[]) {
-      config[row.config_key] = JSON.parse(row.config_value);
+      try {
+        config[row.config_key] = typeof row.config_value === 'string' 
+          ? JSON.parse(row.config_value) 
+          : row.config_value;
+      } catch (e) {
+        console.error(`Parse error for ${row.config_key}:`, e);
+        config[row.config_key] = row.config_value;
+      }
     }
     res.json(config);
   } catch (error) {

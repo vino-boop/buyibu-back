@@ -557,16 +557,7 @@ app.post('/api/fortune/accounts', async (req, res) => {
     if (existAccount.length === 0) {
       await pool.query(
         'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [name, defaultPhone, phone || '', 'none', 'none', 'member', 'none', 'normal', 'user']
-      );
-    }
-    
-    // 同时写入 ik_accounts（铜板数量）
-    const [existIk] = await pool.query('SELECT id FROM ik_accounts WHERE user_id = ?', [String(newUserId)]);
-    if (existIk.length === 0) {
-      await pool.query(
-        'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
-        [String(newUserId), name, phone || '', 'active', 1, 100]
+        [name, defaultPhone, phone || '', 'none', 'none', 'member', 'none', 'normal', 'user', 100]
       );
     }
     
@@ -734,17 +725,9 @@ app.post('/api/auth/login', async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ error: '密码错误' });
     }
-    // 登录成功后将用户注册到 ik_accounts
-    const isMember = user.philosophy === 'member' ? 1 : 0;
-    
-    // 获取用户 tokens
-    const [ikRows] = await pool.query('SELECT tokens FROM ik_accounts WHERE user_id = ?', [String(user.id)]);
-    const userTokens = ikRows.length > 0 ? (ikRows[0].tokens || 0) : 100;
-    
-    await pool.query(
-      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), phone = VALUES(phone), is_member = VALUES(is_member), tokens = VALUES(tokens)',
-      [String(user.id), user.name, user.phone, user.status || 'active', isMember, userTokens]
-    );
+    // 登录成功
+    // tokens 现在存储在 all_accounts 表中
+    const userTokens = user.tokens || 100;
     
     // 获取 yh_accounts 中的详细信息
     const [yhRows] = await pool.query('SELECT * FROM yh_accounts WHERE phone = ?', [user.phone]);
@@ -791,19 +774,13 @@ app.post('/api/auth/register', async (req, res) => {
       }
     }
     
-    // 插入 all_accounts
-    const [result] = await pool.query(
-      'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [defaultName, phone || defaultName, phone || '', password || '', isGuest ? 'guest' : 'none', 'none', 'none', isGuest ? 'guest' : 'normal', isGuest ? 'guest' : 'user']
-    );
-    
     // 游客不送先令，普通用户默认100先令
     const initialTokens = isGuest ? 0 : 100;
     
-    // 注册成功后添加到 ik_accounts
-    await pool.query(
-      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
-      [String(result.insertId), phone || defaultName, phone || '', isGuest ? 'guest' : 'active', 0, initialTokens]
+    // 插入 all_accounts（包含 tokens 字段）
+    const [result] = await pool.query(
+      'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [defaultName, phone || defaultName, phone || '', password || '', isGuest ? 'guest' : 'none', 'none', 'none', isGuest ? 'guest' : 'normal', isGuest ? 'guest' : 'user', initialTokens]
     );
     
     res.json({ 

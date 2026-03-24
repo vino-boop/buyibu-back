@@ -275,11 +275,21 @@ app.delete('/api/philosophy/questions/:id', async (req, res) => {
 });
 
 // ============================================================
-// 哲思模块 API - 历史记录 (ik_history)
+// 哲思模块 API - 历史记录 (ik_user_conversations)
 // ============================================================
 app.get('/api/philosophy/history', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM ik_history ORDER BY create_time DESC');
+    const { user_id } = req.query;
+    let query = 'SELECT * FROM ik_user_conversations';
+    let params: any[] = [];
+    
+    if (user_id) {
+      query += ' WHERE user_id = ?';
+      params = [user_id];
+    }
+    
+    query += ' ORDER BY created_at DESC LIMIT 100';
+    const [rows] = await pool.query(query, params);
     res.json({ history: rows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -290,11 +300,10 @@ app.get('/api/philosophy/history/:userId', async (req, res) => {
   try {
     // userId 可能是数字或字符串，都需要查询
     const userIdStr = String(req.params.userId);
-    const userIdNum = parseInt(req.params.userId);
     
     const [rows] = await pool.query(
-      'SELECT * FROM ik_history WHERE user_id = ? OR user_id = ? ORDER BY create_time DESC', 
-      [userIdStr, userIdNum]
+      'SELECT * FROM ik_user_conversations WHERE user_id = ? ORDER BY created_at DESC', 
+      [userIdStr]
     );
     res.json({ history: rows });
   } catch (error) {
@@ -393,20 +402,27 @@ app.put('/api/philosophy/judge-prompt', async (req, res) => {
 });
 
 // ============================================================
-// 哲思模块 API - 用户信息 (使用 all_accounts)
+// 哲思模块 API - 用户信息 (使用 all_accounts + ik_accounts)
 // ============================================================
 app.get('/api/philosophy/users', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM all_accounts ORDER BY id DESC');
-    const users = (rows as any[]).map(a => ({
-      userId: a.id,
-      name: a.name,
-      isMember: a.philosophy === 'member',
-      tokenBalance: Math.floor(Math.random() * 10000000),
-      questionSets: Math.floor(Math.random() * 30),
-      status: a.philosophy === 'none' ? '未注册' : a.philosophy === 'error' ? '异常' : '正常',
-      createdAt: a.created_at,
-    }));
+    // 从 all_accounts 获取用户列表
+    const [accounts] = await pool.query('SELECT * FROM all_accounts ORDER BY id DESC');
+    const [tokens] = await pool.query('SELECT * FROM ik_accounts');
+    const tokenMap = new Map((tokens as any[]).map(t => [t.user_id, t]));
+    
+    const users = (accounts as any[]).map(a => {
+      const tokenInfo = tokenMap.get(String(a.id));
+      return {
+        userId: a.id,
+        name: a.name,
+        isMember: a.philosophy === 'member',
+        tokenBalance: tokenInfo?.tokens || 0,
+        questionSets: tokenInfo?.tokens ? Math.floor(tokenInfo.tokens / 100000) : 0, // 估算
+        status: a.philosophy === 'none' ? '未注册' : a.philosophy === 'error' ? '异常' : '正常',
+        createdAt: a.created_at,
+      };
+    });
     res.json({ users });
   } catch (error) {
     res.status(500).json({ error: String(error) });

@@ -546,24 +546,31 @@ app.post('/api/fortune/accounts', async (req, res) => {
     // 写入 yh_accounts 表
     const [result] = await pool.query(
       'INSERT INTO yh_accounts (name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, phone, wechat, fortune || 'none', status || 'normal', role || 'user', gender || 'male', birth_date, birth_time, birth_place, personality || 'MYSTIC']
+      [name, phone || '', wechat, fortune || 'none', status || 'normal', role || 'user', gender || 'male', birth_date, birth_time, birth_place, personality || 'MYSTIC']
     );
     
-    // 同时写入 all_accounts 表（统一账号系统）
-    const [existAccount] = await pool.query('SELECT id FROM all_accounts WHERE phone = ?', [phone]);
-    if (existAccount.length === 0 && phone) {
+    const newUserId = result.insertId;
+    
+    // 同时写入 all_accounts 表（统一账号系统）- 不管 phone 是否存在都写入
+    const defaultPhone = phone || `yunhe_${newUserId}`;
+    const [existAccount] = await pool.query('SELECT id FROM all_accounts WHERE username = ?', [defaultPhone]);
+    if (existAccount.length === 0) {
       await pool.query(
         'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [name, phone, phone, '', 'none', 'member', 'none', 'normal', 'user']
-      );
-      // 同时写入 ik_accounts
-      await pool.query(
-        'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
-        [String(result.insertId), name, phone, 'active', 1, 100]
+        [name, defaultPhone, phone || '', 'none', 'none', 'member', 'none', 'normal', 'user']
       );
     }
     
-    const [rows] = await pool.query('SELECT * FROM yh_accounts WHERE id = ?', [result.insertId]);
+    // 同时写入 ik_accounts（铜板数量）
+    const [existIk] = await pool.query('SELECT id FROM ik_accounts WHERE user_id = ?', [String(newUserId)]);
+    if (existIk.length === 0) {
+      await pool.query(
+        'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
+        [String(newUserId), name, phone || '', 'active', 1, 100]
+      );
+    }
+    
+    const [rows] = await pool.query('SELECT * FROM yh_accounts WHERE id = ?', [newUserId]);
     res.json(rows[0]);
   } catch (error) {
     res.status(500).json({ error: String(error) });

@@ -8,12 +8,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// MySQL 连接配置
+// MySQL 连接配置（云服务器）
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST || '42.193.225.114',
   port: parseInt(process.env.DB_PORT || '3306'),
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
+  password: process.env.DB_PASSWORD || 'Zhiming2024!',
   database: process.env.DB_NAME || 'buyibu',
   waitForConnections: true,
   connectionLimit: 5,
@@ -451,6 +451,124 @@ app.get('/api/fortune/liuyao', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM yh_fortune_liuyao ORDER BY created_at DESC');
     res.json({ records: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 获取人格配置列表
+app.get('/api/fortune/personalities', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM yh_personalities WHERE is_active = 1');
+    res.json({ personalities: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 获取指定人格配置
+app.get('/api/fortune/personalities/:key', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM yh_personalities WHERE personality_key = ?', [req.params.key]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Personality not found' });
+    }
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 运何模块账号管理 (yh_accounts)
+app.get('/api/fortune/accounts', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM yh_accounts ORDER BY id DESC');
+    res.json({ accounts: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post('/api/fortune/accounts', async (req, res) => {
+  try {
+    const { name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO yh_accounts (name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, phone, wechat, fortune || 'none', status || 'normal', role || 'user', gender || 'male', birth_date, birth_time, birth_place, personality || 'MYSTIC']
+    );
+    const [rows] = await pool.query('SELECT * FROM yh_accounts WHERE id = ?', [result.insertId]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.put('/api/fortune/accounts/:id', async (req, res) => {
+  try {
+    const { name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality } = req.body;
+    await pool.query(
+      'UPDATE yh_accounts SET name = ?, phone = ?, wechat = ?, fortune = ?, status = ?, role = ?, gender = ?, birth_date = ?, birth_time = ?, birth_place = ?, personality = ? WHERE id = ?',
+      [name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality, req.params.id]
+    );
+    const [rows] = await pool.query('SELECT * FROM yh_accounts WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.delete('/api/fortune/accounts/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM yh_accounts WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 运何模块 API Keys (复用 al_apikeys)
+
+app.get('/api/fortune/apikeys', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM al_apikeys ORDER BY id DESC');
+    res.json({ keys: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post('/api/fortune/apikeys', async (req, res) => {
+  try {
+    const { module_name, api_key, full_key, used_amount, remaining_amount, status } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO al_apikeys (module_name, api_key, full_key, used_amount, remaining_amount, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [module_name, api_key, full_key, used_amount || 0, remaining_amount || 0, status || 'active']
+    );
+    const [rows] = await pool.query('SELECT * FROM al_apikeys WHERE id = ?', [result.insertId]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.put('/api/fortune/apikeys/:id', async (req, res) => {
+  try {
+    const { module_name, api_key, full_key, used_amount, remaining_amount, status } = req.body;
+    await pool.query(
+      'UPDATE al_apikeys SET module_name = ?, api_key = ?, full_key = ?, used_amount = ?, remaining_amount = ?, status = ? WHERE id = ?',
+      [module_name, api_key, full_key, used_amount, remaining_amount, status, req.params.id]
+    );
+    const [rows] = await pool.query('SELECT * FROM al_apikeys WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+app.delete('/api/fortune/apikeys/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM al_apikeys WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

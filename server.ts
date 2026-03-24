@@ -447,10 +447,60 @@ app.get('/api/fortune/bazi', async (req, res) => {
   }
 });
 
+// 保存八字记录
+app.post('/api/fortune/bazi', async (req, res) => {
+  try {
+    const { user_id, name, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, chart_data, question, analysis } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO yh_fortune_bazi (user_id, name, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, chart_data, question, analysis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, name, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month || false, chart_data, question, analysis]
+    );
+    const [rows] = await pool.query('SELECT * FROM yh_fortune_bazi WHERE id = ?', [result.insertId]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 删除八字记录
+app.delete('/api/fortune/bazi/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM yh_fortune_bazi WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 app.get('/api/fortune/liuyao', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM yh_fortune_liuyao ORDER BY created_at DESC');
     res.json({ records: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 保存六爻记录
+app.post('/api/fortune/liuyao', async (req, res) => {
+  try {
+    const { user_id, name, gender, question, hexagram_before, hexagram_after, hexagram_name, analysis } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO yh_fortune_liuyao (user_id, name, gender, question, hexagram_before, hexagram_after, hexagram_name, analysis) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, name, gender, question, hexagram_before, hexagram_after, hexagram_name, analysis]
+    );
+    const [rows] = await pool.query('SELECT * FROM yh_fortune_liuyao WHERE id = ?', [result.insertId]);
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 删除六爻记录
+app.delete('/api/fortune/liuyao/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM yh_fortune_liuyao WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
@@ -845,6 +895,30 @@ app.get('/api/fortune/bazi/:userId', async (req, res) => {
   }
 });
 
+// 保存八字记录
+app.post('/api/fortune/bazi', async (req, res) => {
+  try {
+    const { user_id, name, gender, birth_date, birth_time, birth_place, chart_data, analysis } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO yh_fortune_bazi (user_id, user_name, gender, birth_date, birth_time, birth_place, chart_data, analysis) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, name, gender, birth_date, birth_time, birth_place, chart_data, analysis]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 删除八字记录
+app.delete('/api/fortune/bazi/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM yh_fortune_bazi WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 // ============================================================
 // 运何模块 - 用户六爻
 // ============================================================
@@ -852,6 +926,30 @@ app.get('/api/fortune/liuyao/:userId', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM yh_fortune_liuyao WHERE user_id = ? ORDER BY created_at DESC', [req.params.userId]);
     res.json({ records: rows });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 保存六爻记录
+app.post('/api/fortune/liuyao', async (req, res) => {
+  try {
+    const { user_id, name, gender, question, hexagram_data, analysis } = req.body;
+    const [result] = await pool.query(
+      'INSERT INTO yh_fortune_liuyao (user_id, user_name, gender, question, hexagram_data, analysis) VALUES (?, ?, ?, ?, ?, ?)',
+      [user_id, name, gender, question, hexagram_data, analysis]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// 删除六爻记录
+app.delete('/api/fortune/liuyao/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM yh_fortune_liuyao WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

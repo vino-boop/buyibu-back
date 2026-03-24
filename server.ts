@@ -546,13 +546,16 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, password, phone } = req.body;
     
+    // 判断是否为游客登录（username 以 guest_ 开头）
+    const isGuest = username && username.startsWith('guest_');
+    
     // 获取当前最大编号，生成默认用户名
     const [maxUser] = await pool.query('SELECT MAX(CAST(SUBSTRING(name, 5) AS UNSIGNED)) as maxNum FROM all_accounts WHERE name LIKE "思考者%"');
     const nextNum = (maxUser[0]?.maxNum || 0) + 1;
-    const defaultName = `思考者${String(nextNum).padStart(3, '0')}`;
+    const defaultName = isGuest ? username : `思考者${String(nextNum).padStart(3, '0')}`;
     
-    // 检查手机号是否已存在
-    if (phone) {
+    // 游客不检查手机号，普通用户检查手机号是否已存在
+    if (!isGuest && phone) {
       const [existPhone] = await pool.query('SELECT id FROM all_accounts WHERE phone = ?', [phone]);
       if (existPhone.length > 0) {
         return res.status(400).json({ error: '手机号已注册' });
@@ -562,13 +565,16 @@ app.post('/api/auth/register', async (req, res) => {
     // 插入 all_accounts
     const [result] = await pool.query(
       'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [defaultName, phone || defaultName, phone || '', password, 'none', 'none', 'none', 'normal', 'user']
+      [defaultName, phone || defaultName, phone || '', password || '', isGuest ? 'guest' : 'none', 'none', 'none', isGuest ? 'guest' : 'normal', isGuest ? 'guest' : 'user']
     );
     
-    // 注册成功后添加到 ik_accounts（新用户默认100先令）
+    // 游客不送先令，普通用户默认100先令
+    const initialTokens = isGuest ? 0 : 100;
+    
+    // 注册成功后添加到 ik_accounts
     await pool.query(
       'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
-      [String(result.insertId), phone || defaultName, phone || '', 'active', 0, 100]
+      [String(result.insertId), phone || defaultName, phone || '', isGuest ? 'guest' : 'active', 0, initialTokens]
     );
     
     res.json({ 
@@ -578,7 +584,8 @@ app.post('/api/auth/register', async (req, res) => {
         id: result.insertId,
         username: defaultName,
         phone: phone,
-        tokens: 100
+        tokens: initialTokens,
+        isGuest: isGuest
       }
     });
   } catch (error) {

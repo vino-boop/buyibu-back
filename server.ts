@@ -450,10 +450,10 @@ app.get('/api/fortune/bazi', async (req, res) => {
 // 保存八字记录
 app.post('/api/fortune/bazi', async (req, res) => {
   try {
-    const { user_id, name, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, chart_data, question, analysis } = req.body;
+    const { user_id, name, gender, birth_date, birth_time, birth_place, chart_data, question, analysis } = req.body;
     const [result] = await pool.query(
-      'INSERT INTO yh_fortune_bazi (user_id, name, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, chart_data, question, analysis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, name, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month || false, chart_data, question, analysis]
+      'INSERT INTO yh_fortune_bazi (user_id, user_name, gender, birth_date, birth_time, birth_place, chart_data, question, analysis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, name || '', gender, birth_date, birth_time, birth_place || '', chart_data, question, analysis]
     );
     const [rows] = await pool.query('SELECT * FROM yh_fortune_bazi WHERE id = ?', [result.insertId]);
     res.json(rows[0]);

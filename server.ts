@@ -542,10 +542,27 @@ app.get('/api/fortune/accounts', async (req, res) => {
 app.post('/api/fortune/accounts', async (req, res) => {
   try {
     const { name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality } = req.body;
+    
+    // 写入 yh_accounts 表
     const [result] = await pool.query(
       'INSERT INTO yh_accounts (name, phone, wechat, fortune, status, role, gender, birth_date, birth_time, birth_place, personality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [name, phone, wechat, fortune || 'none', status || 'normal', role || 'user', gender || 'male', birth_date, birth_time, birth_place, personality || 'MYSTIC']
     );
+    
+    // 同时写入 all_accounts 表（统一账号系统）
+    const [existAccount] = await pool.query('SELECT id FROM all_accounts WHERE phone = ?', [phone]);
+    if (existAccount.length === 0 && phone) {
+      await pool.query(
+        'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [name, phone, phone, '', 'none', 'member', 'none', 'normal', 'user']
+      );
+      // 同时写入 ik_accounts
+      await pool.query(
+        'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, tokens) VALUES (?, ?, ?, ?, ?, ?)',
+        [String(result.insertId), name, phone, 'active', 1, 100]
+      );
+    }
+    
     const [rows] = await pool.query('SELECT * FROM yh_accounts WHERE id = ?', [result.insertId]);
     res.json(rows[0]);
   } catch (error) {
@@ -722,9 +739,24 @@ app.post('/api/auth/login', async (req, res) => {
       [String(user.id), user.name, user.phone, user.status || 'active', isMember, userTokens]
     );
     
+    // 获取 yh_accounts 中的详细信息
+    const [yhRows] = await pool.query('SELECT * FROM yh_accounts WHERE phone = ?', [user.phone]);
+    const yhUser = yhRows.length > 0 ? yhRows[0] : null;
+    
     res.json({ 
       success: true, 
-      user: { id: user.id, name: user.name, phone: user.phone, philosophy: user.philosophy, tokens: userTokens },
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        phone: user.phone, 
+        philosophy: user.philosophy, 
+        tokens: userTokens,
+        gender: yhUser?.gender || 'male',
+        birth_date: yhUser?.birth_date || '',
+        birth_time: yhUser?.birth_time || '12:00',
+        birth_place: yhUser?.birth_place || '',
+        personality: yhUser?.personality || 'MYSTIC'
+      },
       token: `user_${user.id}_${Date.now()}`
     });
   } catch (error) {

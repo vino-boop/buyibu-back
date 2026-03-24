@@ -409,16 +409,22 @@ app.get('/api/philosophy/users', async (req, res) => {
     // 从 all_accounts 获取用户列表
     const [accounts] = await pool.query('SELECT * FROM all_accounts ORDER BY id DESC');
     const [tokens] = await pool.query('SELECT * FROM ik_accounts');
-    const tokenMap = new Map((tokens as any[]).map(t => [t.user_id, t]));
+    
+    // 创建一个同时支持字符串和数字的 map
+    const tokenMap = new Map();
+    (tokens as any[]).forEach(t => {
+      tokenMap.set(String(t.user_id), t);
+      tokenMap.set(t.user_id, t); // 同时存数字key
+    });
     
     const users = (accounts as any[]).map(a => {
-      const tokenInfo = tokenMap.get(String(a.id));
+      const tokenInfo = tokenMap.get(a.id) || tokenMap.get(String(a.id));
       return {
         userId: a.id,
         name: a.name,
         isMember: a.philosophy === 'member',
-        tokenBalance: tokenInfo?.tokens || 0,
-        questionSets: tokenInfo?.tokens ? Math.floor(tokenInfo.tokens / 100000) : 0, // 估算
+        tokenBalance: tokenInfo?.tokens ?? 0,
+        questionSets: tokenInfo?.question_count || 0,
         status: a.philosophy === 'none' ? '未注册' : a.philosophy === 'error' ? '异常' : '正常',
         createdAt: a.created_at,
       };

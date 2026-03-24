@@ -556,8 +556,8 @@ app.post('/api/fortune/accounts', async (req, res) => {
     const [existAccount] = await pool.query('SELECT id FROM all_accounts WHERE username = ?', [defaultPhone]);
     if (existAccount.length === 0) {
       await pool.query(
-        'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [name, defaultPhone, phone || '', 'none', 'none', 'member', 'none', 'normal', 'user', 100]
+        'INSERT INTO all_accounts (name, username, phone, password, philosophy, fortune, fengshui, status, role, tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [name, defaultPhone, phone || '', '', 'none', 'member', 'none', 'normal', 'user', 100]
       );
     }
     

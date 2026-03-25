@@ -50,6 +50,27 @@ app.get('/api/overview/apikeys', async (req, res) => {
   }
 });
 
+// 根据模块名获取 API Key
+app.get('/api/overview/apikey/:moduleName', async (req, res) => {
+  try {
+    const [rows]: any = await pool.query(
+      'SELECT api_key, full_key, module_name, remaining_amount, status FROM al_apikeys WHERE module_name = ? AND status = "active" LIMIT 1',
+      [req.params.moduleName]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'API Key not found' });
+    }
+    res.json({
+      api_key: rows[0].api_key,
+      full_key: rows[0].full_key,
+      module_name: rows[0].module_name,
+      remaining_amount: rows[0].remaining_amount
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 app.post('/api/overview/apikeys', async (req, res) => {
   try {
     const { module_name, api_key, full_key, used_amount, remaining_amount, status } = req.body;

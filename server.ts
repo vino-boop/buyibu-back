@@ -888,17 +888,19 @@ app.post('/api/philosophy/history', async (req, res) => {
     const { user_id, user_name, session_id, messages, mode, is_member, result } = req.body;
     
     // 如果传入的是 messages 数组，提取最后的问题和回答
-    let question_content = '';
-    let answer_content = '';
+    let judge_question = '';
+    let user_answer = '';
+    let philosopher_response = '';
     let philosopher_name = '';
     let token_count = 0;
+    let round = 1;
     
     if (messages && Array.isArray(messages)) {
       // 获取用户最后的问题和AI的回答
       const lastUserMsg = messages.filter((m: any) => m.role === 'user').pop();
       const lastAIMsg = messages.filter((m: any) => m.role === 'assistant').pop();
-      question_content = lastUserMsg?.content || '';
-      answer_content = lastAIMsg?.content || '';
+      judge_question = lastUserMsg?.content || '';
+      user_answer = lastAIMsg?.content || '';
     }
     
     // 从 result 中获取更多信息
@@ -907,12 +909,17 @@ app.post('/api/philosophy/history', async (req, res) => {
       token_count = result.tokens || token_count;
     }
     
-    const [rows] = await pool.query('SELECT * FROM all_accounts WHERE id = ?', [user_id]);
-    const user = rows.length > 0 ? rows[0] : null;
+    // 获取当前会话的最大轮次
+    const [existingRows]: any = await pool.query(
+      'SELECT MAX(round) as maxRound FROM ik_user_conversations WHERE session_id = ?',
+      [session_id]
+    );
+    round = (existingRows[0]?.maxRound || 0) + 1;
     
+    // 保存到 ik_user_conversations 表
     const [resultInsert] = await pool.query(
-      'INSERT INTO ik_history (user_id, user_name, session_id, question_content, answer_content, philosopher_name, token_count, mode, is_member) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, user?.name || user_name || '', session_id || '', question_content, answer_content, philosopher_name, token_count || 0, mode || 'chat', is_member || (user?.philosophy === 'member' ? '是' : '否')]
+      'INSERT INTO ik_user_conversations (user_id, session_id, mode, round, judge_question, user_answer, philosopher_response) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [user_id, session_id, mode || 'chat', round, judge_question, user_answer, philosopher_response]
     );
     res.json({ success: true, id: resultInsert.insertId });
   } catch (error) {
@@ -1014,15 +1021,15 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
     const userIdNum = parseInt(req.params.userId);
     const limit = 50; // 最多50条
     
-    // 获取历史记录（兼容字符串和数字ID）
+    // 获取历史记录（使用 ik_user_conversations 表）
     const [historyRows] = await pool.query(
-      'SELECT session_id, mode, question_content, answer_content, philosopher_name, create_time FROM ik_history WHERE user_id = ? OR user_id = ? ORDER BY create_time DESC LIMIT ?',
+      'SELECT session_id, mode, round, judge_question, user_answer, philosopher_response, created_at FROM ik_user_conversations WHERE user_id = ? OR user_id = ? ORDER BY created_at DESC LIMIT ?',
       [userId, userIdNum, limit]
     );
     
     // 获取分析报告
     const [reportRows] = await pool.query(
-      'SELECT session_id, mode, title, summary, philosophical_trend, create_time FROM ik_analysis_reports WHERE user_id = ? OR user_id = ? ORDER BY create_time DESC LIMIT ?',
+      'SELECT session_id, mode, title, summary, philosophical_trend, created_at FROM ik_analysis_reports WHERE user_id = ? OR user_id = ? ORDER BY created_at DESC LIMIT ?',
       [userId, userIdNum, limit]
     );
     
@@ -1033,9 +1040,9 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
     const history = (historyRows as any[]).map(h => ({
       sessionId: h.session_id,
       mode: h.mode,
-      questionCount: 1, // 简化计算
-      lastMessage: h.question_content?.slice(0, 50) || '',
-      createdAt: h.create_time,
+      questionCount: h.round || 1,
+      lastMessage: h.judge_question?.slice(0, 50) || '',
+      createdAt: h.created_at,
       hasReport: sessionsWithReports.has(h.session_id)
     }));
     
@@ -1051,7 +1058,7 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
       history: uniqueHistory,
       reports: (reportRows as any[]).map(r => ({
         ...r,
-        createdAt: r.create_time
+        createdAt: r.created_at
       }))
     });
   } catch (error) {

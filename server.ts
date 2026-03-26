@@ -857,6 +857,41 @@ app.get('/api/philosophy/user/:userId', async (req, res) => {
   }
 });
 
+// 更新用户 tokens
+app.post('/api/philosophy/user/tokens', async (req, res) => {
+  try {
+    const { userId, tokens, action } = req.body;
+    
+    // 获取当前用户
+    const [rows] = await pool.query('SELECT * FROM all_accounts WHERE id = ?', [userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: '用户不存在' });
+    }
+    const user = rows[0];
+    let currentTokens = user.tokens || 0;
+    
+    // 根据 action 计算新 token 数量
+    let newTokens = currentTokens;
+    if (action === 'deduct') {
+      newTokens = currentTokens - tokens;
+    } else if (action === 'add') {
+      newTokens = currentTokens + tokens;
+    } else if (action === 'set') {
+      newTokens = tokens;
+    }
+    
+    // 确保 token 不为负数
+    if (newTokens < 0) newTokens = 0;
+    
+    // 更新数据库
+    await pool.query('UPDATE all_accounts SET tokens = ? WHERE id = ?', [newTokens, userId]);
+    
+    res.json({ success: true, tokens: newTokens });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 // ============================================================
 // 哲思模块 - 哲学家 Prompt
 // ============================================================

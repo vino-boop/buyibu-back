@@ -22,7 +22,7 @@ const pool = mysql.createPool({
 
 // Middleware
 app.use(cors({
-  origin: ['https://philosophy.vinolab.tech', 'https://thinking.vinolab.tech', 'https://www.vinolab.tech', 'http://localhost:3000'],
+  origin: ['https://philosophy.vinolab.tech', 'https://thinking.vinolab.tech', 'https://www.vinolab.tech', 'https://vinolab.tech', 'http://localhost:3000'],
   credentials: true
 }));
 app.use(express.json());

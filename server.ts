@@ -252,7 +252,14 @@ app.get('/api/philosophy/questions', async (req, res) => {
     
     query += ' ORDER BY question_group, question_order, usage_count DESC';
     const [rows] = await pool.query(query, params);
-    res.json({ questions: rows });
+    
+    // 解析 suggestions JSON 字段
+    const parsedRows = rows.map((row: any) => ({
+      ...row,
+      suggestions: row.suggestions ? (typeof row.suggestions === 'string' ? JSON.parse(row.suggestions) : row.suggestions) : null
+    }));
+    
+    res.json({ questions: parsedRows });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
@@ -1077,17 +1084,50 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
 // ============================================================
 // 哲思模块 - 对话历史详细记录 (ik_user_conversations)
 // ============================================================
-// 保存单轮对话
+// 保存对话（每个session只有一行，对话内容以JSON格式存储）
 app.post('/api/conversations', async (req, res) => {
   try {
-    const { user_id, session_id, mode, round, judge_question, user_answer, judge_response, philosopher_response } = req.body;
+    const { user_id, session_id, mode, round, judge_question, user_answer, philosopher_response, conversation_json } = req.body;
     
-    const [result] = await pool.query(
-      'INSERT INTO ik_user_conversations (user_id, session_id, mode, round, judge_question, user_answer, judge_response, philosopher_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, session_id, mode, round || 1, judge_question, user_answer, judge_response, philosopher_response]
+    // 检查是否已存在该session的记录
+    const [existingRows]: any = await pool.query(
+      'SELECT id, conversation_json FROM ik_user_conversations WHERE session_id = ? LIMIT 1',
+      [session_id]
     );
     
-    res.json({ success: true, id: result.insertId });
+    if (existingRows.length > 0) {
+      // 已存在：更新对话JSON，追加新的问答
+      const existingJson = existingRows[0].conversation_json ? JSON.parse(existingRows[0].conversation_json) : [];
+      const newExchange = {
+        round: round || 1,
+        judge_question,
+        user_answer,
+        philosopher_response,
+        timestamp: Date.now()
+      };
+      existingJson.push(newExchange);
+      
+      await pool.query(
+        'UPDATE ik_user_conversations SET conversation_json = ?, mode = COALESCE(?, mode), round = ? WHERE session_id = ?',
+        [JSON.stringify(existingJson), mode, round || existingJson.length, session_id]
+      );
+      res.json({ success: true, id: existingRows[0].id, updated: true });
+    } else {
+      // 不存在：插入新记录
+      const conversationData = [{
+        round: round || 1,
+        judge_question,
+        user_answer,
+        philosopher_response,
+        timestamp: Date.now()
+      }];
+      
+      const [result] = await pool.query(
+        'INSERT INTO ik_user_conversations (user_id, session_id, mode, round, conversation_json) VALUES (?, ?, ?, ?, ?)',
+        [user_id, session_id, mode, round || 1, JSON.stringify(conversationData)]
+      );
+      res.json({ success: true, id: result.insertId, inserted: true });
+    }
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

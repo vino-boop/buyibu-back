@@ -804,11 +804,19 @@ app.post('/api/auth/register', async (req, res) => {
       [defaultName, phone || defaultName, phone || '', password || '', isGuest ? 'guest' : 'none', 'none', 'none', isGuest ? 'guest' : 'normal', isGuest ? 'guest' : 'user', initialTokens]
     );
     
+    const userId = result.insertId;
+    
+    // 同时插入 ik_accounts 表
+    await pool.query(
+      'INSERT INTO ik_accounts (user_id, username, phone, status, is_member, conversation_count, tokens) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [String(userId), defaultName, phone || '', 'active', 0, 0, initialTokens]
+    );
+    
     res.json({ 
       success: true, 
-      userId: result.insertId,
+      userId: userId,
       user: {
-        id: result.insertId,
+        id: userId,
         username: defaultName,
         phone: phone,
         tokens: initialTokens,

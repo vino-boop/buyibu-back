@@ -765,6 +765,7 @@ app.post('/api/auth/login', async (req, res) => {
       success: true, 
       user: { 
         id: user.id, 
+        username: user.username,
         name: user.name, 
         phone: user.phone, 
         philosophy: user.philosophy, 
@@ -1069,19 +1070,30 @@ app.get('/api/philosophy/user-histories/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
     const userIdNum = parseInt(req.params.userId);
+    const isNumericId = !isNaN(userIdNum);
     const limit = 50; // 最多50条
     
     // 获取历史记录（使用 ik_user_conversations 表）
-    const [historyRows] = await pool.query(
-      'SELECT session_id, mode, round, judge_question, user_answer, philosopher_response, created_at FROM ik_user_conversations WHERE user_id = ? OR user_id = ? ORDER BY created_at DESC LIMIT ?',
-      [userId, userIdNum, limit]
-    );
+    let historyQuery = 'SELECT session_id, mode, round, judge_question, user_answer, philosopher_response, created_at FROM ik_user_conversations WHERE user_id = ?';
+    let historyParams: any[] = [userId];
+    if (isNumericId && userIdNum !== userId) {
+      historyQuery += ' OR user_id = ?';
+      historyParams.push(userIdNum);
+    }
+    historyQuery += ' ORDER BY created_at DESC LIMIT ?';
+    historyParams.push(limit);
+    const [historyRows] = await pool.query(historyQuery, historyParams);
     
     // 获取分析报告
-    const [reportRows] = await pool.query(
-      'SELECT session_id, mode, title, summary, philosophical_trend, created_at FROM ik_analysis_reports WHERE user_id = ? OR user_id = ? ORDER BY created_at DESC LIMIT ?',
-      [userId, userIdNum, limit]
-    );
+    let reportQuery = 'SELECT session_id, mode, title, summary, philosophical_trend, created_at FROM ik_analysis_reports WHERE user_id = ?';
+    let reportParams: any[] = [userId];
+    if (isNumericId && userIdNum !== userId) {
+      reportQuery += ' OR user_id = ?';
+      reportParams.push(userIdNum);
+    }
+    reportQuery += ' ORDER BY created_at DESC LIMIT ?';
+    reportParams.push(limit);
+    const [reportRows] = await pool.query(reportQuery, reportParams);
     
     // 构建会话ID列表
     const sessionsWithReports = new Set((reportRows as any[]).map(r => r.session_id));
